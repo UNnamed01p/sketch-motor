@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Arduino 서보모터 동작 화면</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #07111f; color: #e8f2ff; }
+    main { width: min(920px, 94vw); padding: 28px; border: 1px solid #263951; border-radius: 24px; background: #0e1b2b; box-shadow: 0 24px 80px #0008; }
+    h1 { margin: 0 0 8px; font-size: clamp(24px, 4vw, 38px); }
+    .description { margin: 0 0 24px; color: #9fb1c7; }
+    .stage { display: grid; grid-template-columns: 1fr 1.15fr; gap: 24px; align-items: center; }
+    .board { min-height: 300px; padding: 28px; border-radius: 20px; background: #087f8c; border: 5px solid #b5d7cf; position: relative; box-shadow: inset 0 0 45px #003b43; }
+    .board h2 { margin: 0; font-size: 28px; }
+    .chip { width: 120px; height: 72px; margin: 62px auto 0; display: grid; place-items: center; border-radius: 8px; background: #15212a; color: #8fa4b2; box-shadow: 0 0 0 8px #50636a; }
+    .pin { position: absolute; right: -10px; top: 76px; padding: 7px 12px; border-radius: 8px; background: #f2b84b; color: #281b00; font-weight: 800; }
+    .wire { height: 6px; background: #f2b84b; border-radius: 6px; position: absolute; left: calc(50% - 16px); right: calc(50% - 16px); top: 50%; transform: translateY(-3px); z-index: 2; }
+    .servo-area { min-height: 300px; display: grid; place-items: center; position: relative; }
+    .servo { width: 170px; height: 120px; border-radius: 18px; background: linear-gradient(145deg, #4b6078, #223247); border: 4px solid #8095aa; position: relative; box-shadow: 0 16px 35px #0008; }
+    .hub { width: 52px; height: 52px; border-radius: 50%; background: #e6edf3; border: 8px solid #64788b; position: absolute; left: 50%; top: 18px; transform: translateX(-50%); z-index: 3; }
+    .arm { width: 130px; height: 16px; border-radius: 10px; background: #f3f6f9; position: absolute; left: 50%; top: 37px; transform-origin: 8px 8px; transform: rotate(0deg); z-index: 2; transition: transform 2s cubic-bezier(.2,.8,.2,1); box-shadow: 0 3px 8px #0006; }
+    .arm.moving { transform: rotate(170deg); }
+    .label { position: absolute; bottom: 16px; width: 100%; text-align: center; color: #a8bad0; }
+    .readout { margin-top: 26px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .card { padding: 14px; border-radius: 14px; background: #14263a; border: 1px solid #294057; }
+    .card small { display: block; color: #8fa5bc; margin-bottom: 5px; }
+    .card strong { color: #72e4c4; font-size: 20px; }
+    .controls { margin-top: 18px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    button { border: 0; border-radius: 12px; padding: 12px 18px; font-weight: 800; cursor: pointer; background: #52d2ae; color: #08251d; }
+    #status { color: #b8c8d9; }
+    @media (max-width: 700px) {
+      .stage { grid-template-columns: 1fr; }
+      .wire { display: none; }
+      .readout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Arduino 서보모터 동작 시뮬레이션</h1>
+    <p class="description">현재 sketch_motor.ino의 실행 흐름을 화면으로 표현한 모형입니다.</p>
+
+    <section class="stage">
+      <div class="board">
+        <h2>Arduino</h2>
+        <div class="pin">D12 신호</div>
+        <div class="chip">ATmega</div>
+      </div>
+      <div class="wire"></div>
+      <div class="servo-area">
+        <div class="servo">
+          <div class="hub"></div>
+          <div class="arm" id="arm"></div>
+          <div class="label">일반 각도형 서보</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="readout">
+      <div class="card"><small>신호 핀</small><strong>D12</strong></div>
+      <div class="card"><small>명령</small><strong>write(170)</strong></div>
+      <div class="card"><small>현재 표시 각도</small><strong><span id="angle">0</span>°</strong></div>
+    </section>
+
+    <div class="controls">
+      <button id="run">전원 켜기 / 다시 실행</button>
+      <span id="status">버튼을 누르면 setup()이 실행됩니다.</span>
+    </div>
+  </main>
+
+  <script>
+    const arm = document.querySelector('#arm');
+    const angle = document.querySelector('#angle');
+    const status = document.querySelector('#status');
+    const run = document.querySelector('#run');
+    let timer;
+    let startTimer;
+
+    function simulate() {
+      clearInterval(timer);
+      clearTimeout(startTimer);
+      arm.classList.remove('moving');
+      angle.textContent = '0';
+      status.textContent = '전원 인가 → setup() 시작 → 서보를 D12에 연결';
+      void arm.offsetWidth;
+
+      startTimer = setTimeout(() => {
+        arm.classList.add('moving');
+        status.textContent = 'motor1.write(170) 실행: 목표 각도로 이동 중';
+        let value = 0;
+        timer = setInterval(() => {
+          value += 2;
+          if (value >= 170) {
+            value = 170;
+            clearInterval(timer);
+            status.textContent = '170° 도착 → loop()는 추가 동작 없이 계속 실행';
+          }
+          angle.textContent = value;
+        }, 23);
+      }, 500);
+    }
+
+    run.addEventListener('click', simulate);
+  </script>
+</body>
+</html>
